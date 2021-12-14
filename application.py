@@ -11,6 +11,7 @@ def pretty(obj):
 
 class player_record():
     #A Blaseball player, and all the relevant stats except vibes (since those change too frequently to be encapsulated by a static value)
+    #Created using dicts returned by Blaseball Reference.
     def __init__(self, dict):
         self.name = dict["player_name"]
         self.team = dict["team"]
@@ -20,6 +21,47 @@ class player_record():
         self.buoyancy = float(dict["buoyancy"])
         self.pressurization = float(dict["pressurization"])
         self.fate = int(dict["fate"])
+
+class player_chronicle():
+    #A Blaseball player, and all the relevant stats except vibes (since those change too frequently to be encapsulated by a static value)
+    #Created using dicts returned by Chronicler.
+    def __init__(self, dict):
+        self.name = dict["data"]["name"]
+        if "leagueTeamId" in dict["data"]:
+            self.teamID = dict["data"]["leagueTeamId"]
+        else:
+            self.teamID = "NOT YET TRACKED"
+        if "ritual" in dict["data"]:
+            self.ritual = dict["data"]["ritual"]
+        else:
+            self.ritual = "NOT YET TRACKED"
+        self.id = dict["playerId"]
+        if "cinnamon" in dict["data"]:
+            self.cinnamon = float(dict["data"]["cinnamon"])
+        else:
+            self.cinnamon = "NOT YET TRACKED"
+        if "pressurization" in dict["data"]:
+            self.pressurization = float(dict["data"]["pressurization"])
+        else:
+            self.pressurization = "NOT YET TRACKED"
+        if "buoyancy" in dict["data"]:
+            self.buoyancy = float(dict["data"]["buoyancy"])
+        else:
+            self.buoyancy = "NOT YET TRACKED"
+        if "fate" in dict["data"]:
+            self.fate = int(dict["data"]["fate"])
+        else:
+            self.fate = "NOT YET TRACKED"
+    def __str__(self):
+        return f"""{self.name}
+        ID: {self.id}
+        Team ID: {self.teamID}
+        Pregame ritual: {self.ritual}
+        Cinnamon: {self.cinnamon}
+        Pressurization: {self.pressurization}
+        Buoyancy: {self.buoyancy}
+        Fate: {self.fate}
+        Updated on \n"""
 
 class team_record():
     #A Blaseball team. Stores name & ID.
@@ -31,6 +73,57 @@ class team_record():
         return self.name
     def __repr__(self):
         return self.name
+
+def get_player_history(id, page = None):
+    try:
+        if page:
+            paramstr = urllib.parse.urlencode({'player': id, 'count': 1000, 'page': page})
+        else: 
+            paramstr = urllib.parse.urlencode({'player': id, 'count': 1000})
+        baseurl = 'https://api.sibr.dev/chronicler/v1/players/updates'
+        request = baseurl+'?'+paramstr
+        requeststr = urllib.request.urlopen(request).read()
+        data = json.loads(requeststr)
+    except urllib.error.URLError as e:
+        if hasattr(e,"code"):
+            print("The server couldn't fulfill the request.")
+            print("Error code: ", e.code)
+        elif hasattr(e,'reason'):
+            print("We failed to reach a server")
+            print("Reason: ", e.reason)
+    else:
+        return data
+
+def get_full_player_history(id):
+    output = []
+    loop = True
+    page = None
+    while loop:
+        data = get_player_history(id, page)
+        if page == data["nextPage"]:
+            loop = False
+            print("Looping done!")
+        else:
+            page = data["nextPage"]
+            output.append(data["data"])
+            print(f"Appended page. Calling {page} next.")
+    flatput = []
+    for lst in output:
+        for dic in lst:
+            #print(pretty(dic))
+            flatput.append(dic)
+    cleanput = [player_chronicle(entry) for entry in flatput]
+    return cleanput
+
+def fate_filtered_history(list):
+    output = []
+    for entry in list:
+        if output == []:
+            output.append(entry)
+        else:
+            if output[-1].fate != entry.fate:
+                output.append(entry)
+    return output
 
 def get_single_player(id):
     try:
@@ -154,8 +247,16 @@ def vibe_charts():
     chart_bytes.close()
     return render_template('vibechart_template.html',title=f"Summary of {player.name}",player=player, graph=chart_base64.decode('utf8'))
 
+MalikID = '1301ee81-406e-43d9-b2bb-55ca6e0f7765'
+hist = get_full_player_history(MalikID)
+fate_hist = fate_filtered_history(hist)
+for entry in fate_hist:
+    print(entry)
+
+"""
 if __name__ == "__main__":
     # Used when running locally only.
     # When deploying to Google AppEngine, a webserver process will
     # serve your app.
     app.run(host="localhost", port=8080, debug=True)
+"""
