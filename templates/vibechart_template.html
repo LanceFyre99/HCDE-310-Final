@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+    <head><title>{{title}}</title></head>
+    <body>
+        {{player.name}} is a player for the {{player.team}}.<br>
+        Their pre-game ritual is {{player.ritual|lower}}.<br>
+        They have a fate value of {{player.fate}}.<br>
+        Currently, their cinnamon is {{player.cinnamon|round(4)}}, their pressurization is {{player.pressurization|round(4)}}, and their buoyancy is {{player.buoyancy|round(4)}}.<br>
+        (These values are approximate, as the actual values are very, very long.)<br>
+        <br>
+        Vibes are not a constant stat, and are not stored by any reference API.<br>
+        However, the Vibes formula is visible on the frontend of Blaseball.com.<br>
+        As such, we can use the stats we do have to recreate the Vibes value for a given time period.<br>
+        The following chart tracks their Vibes over the course of the 99 day regular season, assuming their stats remain constant for the entire season.<br>
+        <br>
+        {% if result != None %}
+            <img src="data:image/png;base64,{{graph}}"\>
+        {% endif %}
+    </body>
+</html>

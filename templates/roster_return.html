@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+    <head><title>{{title}}</title></head>
+    <body>
+        Here's the roster for the team.<br>
+        Which player do you want the Vibes graph for?<br><br>
+        <form action = "gvibes" method = get>
+            {% for player in roster %}
+            <input type="radio" id={{player.name}} name="selected_player" value={{player.id}}>
+            <label for={{player.name}}>{{player.name}}</label><br>
+            {% endfor %}
+            <input type="submit" value="Submit">
+        </form>
+    </body>
+</html>
