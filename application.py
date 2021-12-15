@@ -26,7 +26,9 @@ class player_chronicle():
     #A Blaseball player, and all the relevant stats except vibes (since those change too frequently to be encapsulated by a static value)
     #Created using dicts returned by Chronicler.
     def __init__(self, dict):
+        self.fateChange = "Pre-change."
         self.name = dict["data"]["name"]
+        self.time = dict["lastSeen"]
         if "leagueTeamId" in dict["data"]:
             self.teamID = dict["data"]["leagueTeamId"]
         else:
@@ -36,32 +38,26 @@ class player_chronicle():
         else:
             self.ritual = "NOT YET TRACKED"
         self.id = dict["playerId"]
-        if "cinnamon" in dict["data"]:
-            self.cinnamon = float(dict["data"]["cinnamon"])
-        else:
-            self.cinnamon = "NOT YET TRACKED"
-        if "pressurization" in dict["data"]:
-            self.pressurization = float(dict["data"]["pressurization"])
-        else:
-            self.pressurization = "NOT YET TRACKED"
-        if "buoyancy" in dict["data"]:
-            self.buoyancy = float(dict["data"]["buoyancy"])
-        else:
-            self.buoyancy = "NOT YET TRACKED"
         if "fate" in dict["data"]:
-            self.fate = int(dict["data"]["fate"])
+            if dict["data"]["fate"]:
+                self.fate = float(dict["data"]["fate"])
+            else:
+                self.fate = "NONE"
         else:
             self.fate = "NOT YET TRACKED"
+        self.modifications = []
+        for key in ["gameAttr","permAttr","seasAttr","weekAttr"]:
+            if key in dict["data"]:
+                for mod in dict["data"][key]:
+                    self.modifications.append(mod)
     def __str__(self):
-        return f"""{self.name}
+        return f"""{self.name}   ({self.time})
         ID: {self.id}
         Team ID: {self.teamID}
         Pregame ritual: {self.ritual}
-        Cinnamon: {self.cinnamon}
-        Pressurization: {self.pressurization}
-        Buoyancy: {self.buoyancy}
+        Modifications: {self.modifications}
         Fate: {self.fate}
-        Updated on \n"""
+        Reason for change to Fate: {self.fateChange}\n"""
 
 class team_record():
     #A Blaseball team. Stores name & ID.
@@ -94,13 +90,38 @@ def get_player_history(id, page = None):
     else:
         return data
 
+def roster_swap_doublecheck(player):
+    try:
+        paramstr1 = urllib.parse.urlencode({'player': player.id, 'count': 1, 'before': player.time})
+        paramstr2 = urllib.parse.urlencode({'player': player.id, 'count': 1, 'after': player.time})
+        baseurl = 'https://api.sibr.dev/chronicler/v1/roster/updates'
+        request1 = baseurl+'?'+paramstr1
+        requeststr1 = urllib.request.urlopen(request1).read()
+        data1 = json.loads(requeststr1)
+        request2 = baseurl+'?'+paramstr2
+        requeststr2 = urllib.request.urlopen(request2).read()
+        data2 = json.loads(requeststr2)
+    except urllib.error.URLError as e:
+        if hasattr(e,"code"):
+            print("The server couldn't fulfill the request.")
+            print("Error code: ", e.code)
+        elif hasattr(e,'reason'):
+            print("We failed to reach a server")
+            print("Reason: ", e.reason)
+    else:
+        if data1['data'] and data2['data']:
+            if data1['data'][0]['teamId'] != data2['data'][0]['teamId']:
+                return True
+            else:
+                return False
+
 def get_full_player_history(id):
     output = []
     loop = True
     page = None
     while loop:
         data = get_player_history(id, page)
-        if page == data["nextPage"]:
+        if page == data["nextPage"] or data["nextPage"] == None:
             loop = False
             print("Looping done!")
         else:
@@ -117,19 +138,33 @@ def get_full_player_history(id):
 
 def fate_filtered_history(list):
     output = []
+    last_entry = None
     for entry in list:
-        if output == []:
-            output.append(entry)
-        else:
-            if output[-1].fate != entry.fate:
-                output.append(entry)
+        if entry.fate != "NOT YET TRACKED":
+            if last_entry != None:
+                if last_entry.fate != entry.fate:
+                    if output == [] or output[-1].time != last_entry.time:
+                        output.append(last_entry)
+                    if 'ALTERNATE' in entry.modifications and 'ALTERNATE' not in last_entry.modifications:
+                        entry.fateChange = "Stat randomization due to becoming an Alternate."
+                    elif entry.teamID != last_entry.teamID:
+                        entry.fateChange = "Fate reroll due to Feedback swap."
+                    else:
+                        feedback_doublecheck = roster_swap_doublecheck(entry)
+                        if feedback_doublecheck:
+                            entry.fateChange = "Fate reroll due to Feedback swap."
+                        else:
+                            entry.fateChange = "Outlier. Cause cannot be clearly determined."
+                    output.append(entry)
+            last_entry = entry
     return output
 
-def get_single_player(id):
+def get_player(id = None):
+    #This gets EVERY player if it doesn't get an ID.
     try:
         paramstr = id
         baseurl = 'https://api.blaseball-reference.com/v2/players/'
-        request = baseurl+paramstr
+        request = baseurl+str(paramstr or '')
         requeststr = urllib.request.urlopen(request).read()
         data = json.loads(requeststr)
     except urllib.error.URLError as e:
@@ -186,6 +221,8 @@ def summarize_player(player):
     if float(player['batting_stars']) >= 5.0:
         print(pretty(player))
         return f'----------------------------\nName: {player["player_name"]}\nTeam: {player["team"]}\nPregame Ritual: {player["ritual"]}\nBatting Stars: {player["batting_stars"]}\n'
+
+
 """
 with open("batters.txt", "w") as text_file:
     idlist = clean_team_list()
@@ -222,7 +259,7 @@ def roster_printer():
 @app.route("/gvibes")
 def vibe_charts():
     id = request.args.get("selected_player")
-    player = player_record(get_single_player(id))
+    player = player_record(get_player(id))
     #Vibes aren't stored on any accessible APIs, but its formula is visible on the front-end of the Blaseball website.
     #We can use this to recreate a player's vibes using stats that we do have access to.
     frequency = 6 + round(10 * player.buoyancy)
@@ -246,12 +283,31 @@ def vibe_charts():
     chart_base64 = base64.b64encode(chart_bytes.read())
     chart_bytes.close()
     return render_template('vibechart_template.html',title=f"Summary of {player.name}",player=player, graph=chart_base64.decode('utf8'))
-
+"""
 MalikID = '1301ee81-406e-43d9-b2bb-55ca6e0f7765'
 hist = get_full_player_history(MalikID)
 fate_hist = fate_filtered_history(hist)
 for entry in fate_hist:
     print(entry)
+"""
+
+league_fate = []
+idlist = clean_team_list(13)
+print("Got team list!")
+for team in idlist:
+    print(team.name)
+    roster = get_team_roster(team.id)
+    for player in roster:
+        print(player["player_name"])
+        hist = get_full_player_history(player["player_id"])
+        fate_hist = fate_filtered_history(hist)
+        if len(fate_hist) > 1:
+            for entry in fate_hist:
+                league_fate.append(entry)
+
+with open("fate.txt", "w") as text_file:
+    for entry in league_fate:
+        text_file.write(str(entry))
 
 """
 if __name__ == "__main__":
