@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+    <head><title>{{title}}</title></head>
+    <body>
+        In Blaseball, a player's Fate normally remains constant. However, there are two types of scenarios where a player's fate has been recorded to change. <br><br>
+
+        Firstly, when a player's stats are randomized due to the application of the Alternate modification, their Fate will sometimes be randomized as well.<br>
+        This seems to occur consistently with the older versions of Alternate which were complete randomization.<br>
+        Newer variants such as that applied by Alternate Trust, which maintain overall stat count, do not change Fate.<br><br>
+
+        Secondly, players may sometimes be swapped with a player on the opposing team during Feedback weather. When this occurs, both players will have their Fate randomized.<br><br>
+
+        It's possible that there be other, outlier cases, but at time of writing, all known fate changes should be able to be attributed to one of these two causes.<br><br>
+
+        As for {{history[-1].name}}:<br><br>
+
+        {% if length > 1 %}
+            This player's existence was first recorded on {{history[0].date}} at {{history[0].time}}. <br>
+            At this time, their Fate was {{history[0].fate}}. <br><br>
+            {% for entry in history %}
+                {% if entry.fateChange %}
+                    On {{entry.date}} at {{entry.time}}, their Fate changed to {{entry.fate}} {{entry.fateChange}}<br><br>
+                {% endif %}
+            {% endfor %}
+            Their Fate hasn't changed any further since then.<br>
+        {% else %}
+            Their Fate is {{history[0].fate}}. This value has never changed.<br>
+        {% endif %}
+    </body>
+</html>

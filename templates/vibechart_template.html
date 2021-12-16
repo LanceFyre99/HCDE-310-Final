@@ -2,9 +2,8 @@
 <html>
     <head><title>{{title}}</title></head>
     <body>
-        {{player.name}} is a player for the {{player.team}}.<br>
+        {{player.name}}{% if player.team %} is a player for the {{player.team}}{% else %} does not play on any team. They are dead{% endif %}.<br>
         Their pre-game ritual is {{player.ritual|lower}}.<br>
-        They have a fate value of {{player.fate}}.<br>
         Currently, their cinnamon is {{player.cinnamon|round(4)}}, their pressurization is {{player.pressurization|round(4)}}, and their buoyancy is {{player.buoyancy|round(4)}}.<br>
         (These values are approximate, as the actual values are very, very long.)<br>
         <br>
