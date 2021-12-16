@@ -176,6 +176,24 @@ def fate_filtered_history(input):
     output[0].name = input[-1].name
     return output
 
+def get_players_seasonal(season = 23):
+    #This defaults to getting all dead players.
+    try:
+        paramstr = paramstr = urllib.parse.urlencode({'season': season})
+        baseurl = 'https://api.blaseball-reference.com/v2/players'
+        request = baseurl+'?'+paramstr
+        requeststr = urllib.request.urlopen(request).read()
+        data = json.loads(requeststr)
+    except urllib.error.URLError as e:
+        if hasattr(e,"code"):
+            print("The server couldn't fulfill the request.")
+            print("Error code: ", e.code)
+        elif hasattr(e,'reason'):
+            print("We failed to reach a server")
+            print("Reason: ", e.reason)
+    else:
+        return data
+
 def get_pooled_players(pool = 'deceased'):
     #This defaults to getting all dead players.
     try:
@@ -251,6 +269,26 @@ def clean_team_list(season = 23):
     team_list = get_teams(season)
     clean_list = [team_record(team) for team in team_list]
     return clean_list
+
+def get_player_stats(category, season, players):
+    playerIds = ''
+    for player in players:
+        playerIds = playerIds+str(player['player_id'])+','
+    try:
+        paramstr = urllib.parse.urlencode({'category':category, 'season':season, 'playerIds':playerIds})
+        baseurl = 'https://api.blaseball-reference.com/v1/playerStats'
+        request = baseurl+'?'+paramstr
+        requeststr = urllib.request.urlopen(request).read()
+        data = json.loads(requeststr)
+    except urllib.error.URLError as e:
+        if hasattr(e,"code"):
+            print("The server couldn't fulfill the request.")
+            print("Error code: ", e.code)
+        elif hasattr(e,'reason'):
+            print("We failed to reach a server")
+            print("Reason: ", e.reason)
+    else:
+        return data
 
 def season_mapping():
     try:
@@ -369,7 +407,7 @@ def fleague_list():
             app.logger.info(f"***{team} remains. They are {team.status}")
             outdata.append(team)
     outdata.append(area_record("Vault", "0x1F947", '698cfc6d-e95e-4391-b754-b87337e4d2a9'))
-    outdata.append(area_record("Hall of Flame", "0x1f480", id = 'Hell'))
+    outdata.append(area_record("Hall of Flame", "0x1f480", id = 'Underworld'))
     return render_template('fteam_select.html',title=title,data=outdata)
 
 @app.route("/froster")
@@ -377,7 +415,7 @@ def froster_printer():
     team = request.args.get("selected_team")
     print(team)
     app.logger.info(f"Getting roster for the {team}")
-    if team == "Hell":
+    if team == "Underworld":
         raw_roster = get_pooled_players()
         for player in raw_roster:
             if player['team'] != 'null':
@@ -393,9 +431,55 @@ def fate_summary():
     hist = get_full_player_history(player_id)
     fate_hist = fate_filtered_history(hist)
     return render_template('fate_history.html',title=f"Vibe summary for {fate_hist[0].name}",history=fate_hist, length = len(fate_hist))
-#@app.route("/fseason")
 
-#@app.route("/fscatter")
+@app.route("/fseason")
+def scatter_definer():
+    batter_stats = ['doubles','triples','home_runs','runs_batted_in','walks', 'strikeouts', 'batting_average', 'on_base_percentage', 'batting_average_risp', 'slugging', 'on_base_slugging']
+    pitcher_stats = ["win_pct","earned_run_average","walks_per_9","hits_per_9","strikeouts_per_9","home_runs_per_9","whip","strikeouts_per_walk"]
+    return render_template('scatter_definer.html',title=f"Fate Comparison Tool",batter_stats=batter_stats,pitcher_stats=pitcher_stats)
+
+@app.route("/fscatter")
+def fate_scatter():
+    #get all players, filter out to only include players in correct position for stat, get stats for all players
+    batter_stats = ['doubles','triples','home_runs','runs_batted_in','walks', 'strikeouts', 'batting_average', 'on_base_percentage', 'batting_average_risp', 'slugging', 'on_base_slugging']
+    statistic = request.args.get("selected_stat")
+    season = int(request.args.get("season"))-1
+    league = get_players_seasonal(season)
+    playersfate = []
+    if statistic in batter_stats:
+        category = 'batting'
+        for player in league:
+            if player['position_type'] == 'BATTER' and player["current_location"] == "main_roster":
+                playersfate.append(player)
+    else:
+        category = 'pitching'
+        for player in league:
+            if player['position_type'] == 'PITCHER' and player["current_location"] == "main_roster":
+                playersfate.append(player)
+    playerstats = get_player_stats(category, season, playersfate)
+    playersfate = sorted(playersfate, key = lambda i: i['player_id'])
+    playerstats = sorted(playerstats, key = lambda i: (i['player_id'], float(i[statistic]or 0.0)))
+    graph_inputs = {'fate':[], 'stat':[]}
+    for player in playersfate:
+        graph_inputs['fate'].append(player['fate'])
+    last_player = None
+    for player in playerstats:
+        app.logger.info(player['player_name'])
+        if last_player == player['player_name']:
+            graph_inputs['stat'][-1]+=(float(player[statistic] or 0.0))
+        else:
+            graph_inputs['stat'].append(float(player[statistic] or 0.0))
+        last_player = player['player_name']
+    plt.scatter(x=graph_inputs['fate'], y=graph_inputs['stat'])
+    plt.xlabel('Fate')
+    plt.ylabel(statistic)
+    chart_bytes = BytesIO()
+    plt.savefig(chart_bytes, format='jpg')
+    plt.close()
+    chart_bytes.seek(0)
+    chart_base64 = base64.b64encode(chart_bytes.read())
+    chart_bytes.close()
+    return render_template('fate_scatter.html',title=f"{statistic} compared to Fate in season {season+1}", graph=chart_base64.decode('utf8'))
 
 #@app.route("/review")
 

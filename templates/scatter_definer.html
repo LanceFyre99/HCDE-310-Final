@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+    <head><title>{{title}}</title></head>
+    <body>
+        Which team's roster do you want?<br><br>
+        <form action = "fscatter" method = get>
+            <label for="season">Season to analyze (3 through 24):</label>
+            <input type="number" id="season" name="season" min="3" max="24">
+            <br>
+            Which stat do you want to compare against?<br><br>
+            Batting stats:<br>
+            {% for stat in batter_stats %}
+            <input type="radio" id={{stat}} name="selected_stat" value={{stat}}>
+            <label for={{stat}}>{{stat}}</label><br>
+            {% endfor %}<br>
+            Pitching stats:<br>
+            {% for stat in pitcher_stats %}
+            <input type="radio" id={{stat}} name="selected_stat" value={{stat}}>
+            <label for={{stat}}>{{stat}}</label><br>
+            {% endfor %}
+            <input type="submit" value="Go">
+        </form>
+    </body>
+</html>
