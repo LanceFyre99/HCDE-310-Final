@@ -296,9 +296,12 @@ def get_player_stats(category, season, players):
     #Takes a type of stat (pitching or batting), a season, and a list of dictionaries of player stats as returned by Blaseball Reference.
     #Returns the corresponding performance stats for that season for all players inputted as a list of dictionaries.
     playerIds = ''
+    i = 0
     for player in players:
+        i+=1
         playerIds = playerIds+str(player['player_id'])+','
     try:
+        app.logger.info(i)
         paramstr = urllib.parse.urlencode({'category':category, 'season':season, 'playerIds':playerIds})
         baseurl = 'https://api.blaseball-reference.com/v1/playerStats'
         request = baseurl+'?'+paramstr
@@ -350,17 +353,16 @@ def vroster_printer():
     team = request.args.get("selected_team")
     app.logger.info(f"Getting roster for the {team}")
     if team == "Underworld":
-        #The Hall of Flame is not and never was a team. It does not have a roster that can be called.
-        #Since it's just where dead players hang out, we instead just get a list of all deceased players without a proper team affiliation.
-        #Yes, that's an issue. There are dead players who are still playing actively. It makes this rather annoying.
         raw_roster = get_pooled_players()
+        filter_roster = []
         for player in raw_roster:
-            if player['team'] != 'null':
-                raw_roster.remove(player)
+            if player['team'] == 'null' or player['team'] == None:
+                filter_roster.append(player)
+        team = "Hall of Flame"
     else:
         #You can get the roster for all the other teams, including the Vault, by directly feeding it to Blaseball Reference. Convenient.
-        raw_roster = get_team_roster(team, includeShadows=True)
-    clean_roster = [player_record(player) for player in raw_roster]
+        filter_roster = get_team_roster(team, includeShadows=True)
+    clean_roster = [player_record(player) for player in filter_roster]
     return render_template('vroster_return.html',title=f"Roster for the {team}",roster=clean_roster,team=team)
 
 @app.route("/gvibes")
@@ -427,13 +429,15 @@ def froster_printer():
     #Yes, that's an issue. There are dead players who are still playing actively. It makes this rather annoying.
     if team == "Underworld":
         raw_roster = get_pooled_players()
+        filter_roster = []
         for player in raw_roster:
-            if player['team'] != 'null':
-                raw_roster.remove(player)
+            if player['team'] == 'null' or player['team'] == None:
+                filter_roster.append(player)
+        team = "Hall of Flame"
     else:
         #You can get the roster for all the other teams, including the Vault, by directly feeding it to Blaseball Reference. Convenient.
-        raw_roster = get_team_roster(team, includeShadows=True)
-    clean_roster = [player_record(player) for player in raw_roster]
+        filter_roster = get_team_roster(team, includeShadows=True)
+    clean_roster = [player_record(player) for player in filter_roster]
     return render_template('froster_return.html',title=f"Roster for the {team}",roster=clean_roster,team=team)
 
 @app.route("/fhist")
@@ -447,52 +451,101 @@ def fate_summary():
 @app.route("/fseason")
 def scatter_definer():
     #Prompt the user to select a performance stat to analyze against and a season to draw data from.
-    batter_stats = ['doubles','triples','home_runs','runs_batted_in','walks', 'strikeouts', 'batting_average', 'on_base_percentage', 'batting_average_risp', 'slugging', 'on_base_slugging']
-    pitcher_stats = ["win_pct","earned_run_average","walks_per_9","hits_per_9","strikeouts_per_9","home_runs_per_9","whip","strikeouts_per_walk"]
+    batter_stats = [('doubles', 'Doubles'),
+    ('triples','Triples'),
+    ('home_runs','Home Runs (HR)'),
+    ('runs_batted_in','Runs batted in (RBI)'),
+    ('walks','Walks (Bases on Balls)'),
+    ('strikeouts','Strikeouts'),
+    ('batting_average','Batting Average (BA)'),
+    ('on_base_percentage','On Base Percentage (OBP)'),
+    ('batting_average_risp','Batting Average with runners in scoring position (BA/RISP)'),
+    ('slugging','Slugging Percentage (SLG)'),
+    ('on_base_slugging','On Base plus Slugging Percentage (OPS)')]
+    pitcher_stats = [("win_pct", 'Winning percentage (W-L%)'),
+    ("earned_run_average",'Earned Run Average (ERA)'),
+    ("walks_per_9",'Walks per 9 innings'),
+    ("hits_per_9",'Hits per 9 innings'),
+    ("strikeouts_per_9",'Strikeouts per 9 innings'),
+    ("home_runs_per_9",'Home Runs per 9 innings'),
+    ("whip",'Walks and Hits per inning pitched (WHIP)'),
+    ("strikeouts_per_walk",'Strikeout-to-Walk ratio')]
     return render_template('scatter_definer.html',title=f"Fate Comparison Tool",batter_stats=batter_stats,pitcher_stats=pitcher_stats)
 
 @app.route("/fscatter")
 def fate_scatter():
     #get all players, filter out to only include players in correct position for stat, get stats for all players
-    batter_stats = ['doubles','triples','home_runs','runs_batted_in','walks', 'strikeouts', 'batting_average', 'on_base_percentage', 'batting_average_risp', 'slugging', 'on_base_slugging']
+    batter_stats = [('doubles', 'Doubles'),
+    ('triples','Triples'),
+    ('home_runs','Home Runs (HR)'),
+    ('runs_batted_in','Runs batted in (RBI)'),
+    ('walks','Walks (Bases on Balls)'),
+    ('strikeouts','Strikeouts'),
+    ('batting_average','Batting Average (BA)'),
+    ('on_base_percentage','On Base Percentage (OBP)'),
+    ('batting_average_risp','Batting Average with runners in scoring position (BA/RISP)'),
+    ('slugging','Slugging Percentage (SLG)'),
+    ('on_base_slugging','On Base plus Slugging Percentage (OPS)')]
+    pitcher_stats = [("win_pct", 'Winning percentage (W-L%)'),
+    ("earned_run_average",'Earned Run Average (ERA)'),
+    ("walks_per_9",'Walks per 9 innings'),
+    ("hits_per_9",'Hits per 9 innings'),
+    ("strikeouts_per_9",'Strikeouts per 9 innings'),
+    ("home_runs_per_9",'Home Runs per 9 innings'),
+    ("whip",'Walks and Hits per inning pitched (WHIP)'),
+    ("strikeouts_per_walk",'Strikeout-to-Walk ratio')]
+    raw_batter_stats = ['doubles','triples','home_runs','runs_batted_in','walks', 'strikeouts', 'batting_average', 'on_base_percentage', 'batting_average_risp', 'slugging', 'on_base_slugging']
     statistic = request.args.get("selected_stat")
     season = int(request.args.get("season"))-1
     #get all players for the chosen season
     league = get_players_seasonal(season)
     playersfate = []
     #Go over the list of players. Only keep those who are in the correct position on the main roster.
-    if statistic in batter_stats:
+    if statistic in raw_batter_stats:
         category = 'batting'
         for player in league:
             if player['position_type'] == 'BATTER' and player["current_location"] == "main_roster":
                 playersfate.append(player)
+        for term in batter_stats:
+            if term[0] == statistic:
+                cleanstat = term[1]
     else:
         category = 'pitching'
         for player in league:
             if player['position_type'] == 'PITCHER' and player["current_location"] == "main_roster":
                 playersfate.append(player)
+        for term in pitcher_stats:
+            if term[0] == statistic:
+                cleanstat = term[1]
     #Get the stats for all remaining players.
     playerstats = get_player_stats(category, season, playersfate)
     #Sort both lists by player id to ensure that the right values are paired together.
     playersfate = sorted(playersfate, key = lambda i: i['player_id'], reverse=True)
-    playerstats = sorted(playerstats, key = lambda i: (i['player_id'], float(i[statistic]or 0.0)), reverse=True )
+    playerstats = sorted(playerstats, key = lambda i: (i['player_id'], float(i[statistic]or 0.0)), reverse=True)
     #matplotlib can't handle lists of dictionaries, so convert both of them into a dictionary of lists.
     graph_inputs = {'fate':[], 'stat':[]}
-    for player in playersfate:
-        graph_inputs['fate'].append(player['fate'])
+    active = []
     last_player = None
+    
     for player in playerstats:
-        app.logger.info(player['player_name'])
         #the stat list includes records for all the teams a player played for separate from each other. Only the highest stat is kept.
-        if last_player == player['player_name']:
+        if last_player == player['player_id']:
             graph_inputs['stat'][-1]=(float(player[statistic] or 0.0))
         else:
             graph_inputs['stat'].append(float(player[statistic] or 0.0))
-        last_player = player['player_name']
+        last_player = player['player_id']
+        active.append(player['player_id'])
+    for player in playersfate:
+        if player['player_id'] in active:
+            graph_inputs['fate'].append(player['fate'])
+    app.logger.info(len(playerstats))
+    app.logger.info(len(graph_inputs['stat']))
+    with open("test.txt", "w") as text_file:
+        text_file.write(pretty(graph_inputs))
     #Finally graph the thing and feed it to the template.
     plt.scatter(x=graph_inputs['fate'], y=graph_inputs['stat'])
     plt.xlabel('Fate')
-    plt.ylabel(statistic)
+    plt.ylabel(cleanstat)
     chart_bytes = BytesIO()
     plt.savefig(chart_bytes, format='jpg')
     plt.close()

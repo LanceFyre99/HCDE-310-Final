@@ -10,13 +10,13 @@
             Which stat do you want to compare against?<br><br>
             Batting stats:<br>
             {% for stat in batter_stats %}
-            <input type="radio" id={{stat}} name="selected_stat" value={{stat}}>
-            <label for={{stat}}>{{stat}}</label><br>
+            <input type="radio" id={{stat[0]}} name="selected_stat" value={{stat[0]}}>
+            <label for={{stat[0]}}>{{stat[1]}}</label><br>
             {% endfor %}<br>
             Pitching stats:<br>
             {% for stat in pitcher_stats %}
-            <input type="radio" id={{stat}} name="selected_stat" value={{stat}}>
-            <label for={{stat}}>{{stat}}</label><br>
+            <input type="radio" id={{stat[0]}} name="selected_stat" value={{stat[0]}}>
+            <label for={{stat[0]}}>{{stat[1]}}</label><br>
             {% endfor %}
             <input type="submit" value="Go">
         </form>
