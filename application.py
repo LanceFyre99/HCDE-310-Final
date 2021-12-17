@@ -546,13 +546,14 @@ def fate_scatter():
     plt.scatter(x=graph_inputs['fate'], y=graph_inputs['stat'])
     plt.xlabel('Fate')
     plt.ylabel(cleanstat)
+    plt.title(f'{cleanstat} as compared to Fate in season {season+1}')
     chart_bytes = BytesIO()
     plt.savefig(chart_bytes, format='jpg')
     plt.close()
     chart_bytes.seek(0)
     chart_base64 = base64.b64encode(chart_bytes.read())
     chart_bytes.close()
-    return render_template('fate_scatter.html',title=f"{statistic} compared to Fate in season {season+1}", graph=chart_base64.decode('utf8'))
+    return render_template('fate_scatter.html',title=f"{cleanstat} as compared to Fate in season {season+1}", graph=chart_base64.decode('utf8'))
 
 if __name__ == "__main__":
     app.run(host="localhost", port=8080, debug=True)
