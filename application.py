@@ -1,4 +1,4 @@
- from flask import Flask, render_template, request
+from flask import Flask, render_template, request
 import urllib.parse, urllib.request, urllib.error, json, logging, base64
 import matplotlib.pyplot as plt
 import numpy as np
