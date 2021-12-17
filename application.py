@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+ from flask import Flask, render_template, request
 import urllib.parse, urllib.request, urllib.error, json, logging, base64
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,6 +7,7 @@ from io import BytesIO
 app = Flask(__name__)
 
 def pretty(obj):
+    #I stole this! (Thank you for making this it is very useful)
     return json.dumps(obj, sort_keys=True, indent=2)
 
 class player_record():
@@ -23,8 +24,9 @@ class player_record():
         self.fate = int(dict["fate"])
 
 class player_chronicle():
-    #A Blaseball player, and all the relevant stats except vibes (since those change too frequently to be encapsulated by a static value)
+    #A Blaseball player, and all the relevant stats except vibes (since those change too frequently to be encapsulated by a static value) at a given time period.
     #Created using dicts returned by Chronicler.
+    #placeholder fate values are wordy so that they can be directly read in the HTML and still flow well.
     def __init__(self, dict):
         self.fateChange = None
         self.name = dict["data"]["name"]
@@ -62,7 +64,7 @@ class player_chronicle():
         Reason for change to Fate: {self.fateChange}\n"""
 
 class team_record():
-    #Stores name and ID for a blaseball team or location, as well as if it's a team or location
+    #Stores name and ID for a blaseball team or location, as well as if it's a team or location.
     def __init__(self, dict, type = 'team'):
         self.name = dict["full_name"]
         self.id = dict["team_id"]
@@ -76,11 +78,14 @@ class team_record():
         return self.name
 
 def area_record(name, emoji, id):
-    #defines a team_record class object for a location (such as the hall of flame)
+    #Defines a team_record class object for a location (such as the hall of flame)
     area = {"full_name": name, "team_id": id, "team_current_status": None, "team_emoji": emoji}
     return team_record(area, type='area')
 
 def get_player_history(id, page = None):
+    #Get a page of player history updates from Chronicler.
+    #Returns the pagination token for the next page alongside the data,
+    #which can be fed back to the function as page to get the next page of updates.
     try:
         if page:
             paramstr = urllib.parse.urlencode({'player': id, 'count': 1000, 'page': page})
@@ -101,6 +106,10 @@ def get_player_history(id, page = None):
         return data
 
 def roster_swap_doublecheck(player):
+    #Call chronicler records for before and after the Fate change and checks if there was a team change.
+    #Chronicler doesn't track team as part of player records for earlier seasons,
+    #But it DOES still have roster updates for those seasons.
+    #So, cross-reference the roster-updates.
     try:
         paramstr1 = urllib.parse.urlencode({'player': player.id, 'count': 1, 'before': player.timestamp})
         paramstr2 = urllib.parse.urlencode({'player': player.id, 'count': 1, 'after': player.timestamp})
@@ -126,6 +135,8 @@ def roster_swap_doublecheck(player):
                 return False
 
 def get_full_player_history(id):
+    #gets every page of stat updates for the player of the given ID.
+    #Returns a flat list of dictionaries, as opposed to the nested mess directly returned by get_player_history.
     output = []
     loop = True
     page = None
@@ -147,6 +158,8 @@ def get_full_player_history(id):
     return cleanput
 
 def fate_filtered_history(input):
+    #Takes a player's stat updates as a list of dictionaries (as returned by get_full_player_history())
+    #Returns a list with only the updates where Fate changed, as well as why said changes occured.
     output = []
     last_entry = None
     for entry in input:
@@ -165,11 +178,14 @@ def fate_filtered_history(input):
                             entry.fateChange = "due to a Feedback swap."
                         else:
                             if entry.name in ['Axel Trololol','Lachlan Shelton','Antonio Wallace','Hobbs Cain']:
+                                #Chronicler doesn't have proper records for feedback swaps involving these players.
+                                #I have manually verified that all of their Fate changes coincide with a feedback swap.
                                 entry.fateChange = "due to a Feedback swap."
                             else:
                                 entry.fateChange = "due to... some other cause. (If you're seeing this, odds are that there's been an error.)"
                     output.append(entry)
             else:
+                #Always append the first entry, to represent debut state
                 output.append(entry)
             last_entry = entry
     #people's names change and I'd like to make sure I use the most recent name.
@@ -177,7 +193,7 @@ def fate_filtered_history(input):
     return output
 
 def get_players_seasonal(season = 23):
-    #This defaults to getting all dead players.
+    #Gets the Blaseball Reference records for all players in a given season.
     try:
         paramstr = paramstr = urllib.parse.urlencode({'season': season})
         baseurl = 'https://api.blaseball-reference.com/v2/players'
@@ -195,7 +211,8 @@ def get_players_seasonal(season = 23):
         return data
 
 def get_pooled_players(pool = 'deceased'):
-    #This defaults to getting all dead players.
+    #Gets the Blaseball Reference records for all players in a specific 'playerPool' category.
+    #This defaults to getting all dead players, and that's all I use it for.
     try:
         paramstr = paramstr = urllib.parse.urlencode({'playerPool': pool})
         baseurl = 'https://api.blaseball-reference.com/v2/players'
@@ -213,7 +230,8 @@ def get_pooled_players(pool = 'deceased'):
         return data
 
 def get_player(id = None):
-    #This gets EVERY player if it doesn't get an ID.
+    #Gets the Blaseball Reference records for a given player.
+    #This gets EVERY player if it doesn't get an ID. I don't use this in the final program, but it was helpful for testing.
     try:
         paramstr = id
         baseurl = 'https://api.blaseball-reference.com/v2/players/'
@@ -231,7 +249,8 @@ def get_player(id = None):
         return data
 
 def get_team_roster(id, includeShadows = True):
-    #includeShadows sets whether or not to return reserve ("shadowed") players
+    #Get the Blaseball Reference records for all the players on a specific team.
+    #includeShadows sets whether or not to return reserve ("shadowed") players.
     try:
         paramstr = urllib.parse.urlencode({'teamId': id, 'includeShadows': includeShadows})
         baseurl = 'https://api.blaseball-reference.com/v1/currentRoster'
@@ -249,6 +268,7 @@ def get_team_roster(id, includeShadows = True):
         return data
 
 def get_teams(season = 23):
+    #Returns the Blaseball Reference records for all the teams as of a specific season.
     try:
         paramstr = urllib.parse.urlencode({'season': season})
         baseurl = 'https://api.blaseball-reference.com/v2/teams'
@@ -266,11 +286,15 @@ def get_teams(season = 23):
         return data
 
 def clean_team_list(season = 23):
+    #Returns the Blaseball Reference records for all the teams as of a specific season,
+    #formatted as team_record objects.
     team_list = get_teams(season)
     clean_list = [team_record(team) for team in team_list]
     return clean_list
 
 def get_player_stats(category, season, players):
+    #Takes a type of stat (pitching or batting), a season, and a list of dictionaries of player stats as returned by Blaseball Reference.
+    #Returns the corresponding performance stats for that season for all players inputted as a list of dictionaries.
     playerIds = ''
     for player in players:
         playerIds = playerIds+str(player['player_id'])+','
@@ -290,85 +314,62 @@ def get_player_stats(category, season, players):
     else:
         return data
 
-def season_mapping():
-    try:
-        request = 'https://api.sibr.dev/chronicler/v1/time/seasons'
-        requeststr = urllib.request.urlopen(request).read()
-        data = json.loads(requeststr)
-    except urllib.error.URLError as e:
-        if hasattr(e,"code"):
-            print("The server couldn't fulfill the request.")
-            print("Error code: ", e.code)
-        elif hasattr(e,'reason'):
-            print("We failed to reach a server")
-            print("Reason: ", e.reason)
-    else:
-        del data['data'][-2:]
-        return data['data']
-
-"""
-def summarize_player(player):
-    if float(player['batting_stars']) >= 5.0:
-        print(pretty(player))
-        return f'----------------------------\nName: {player["player_name"]}\nTeam: {player["team"]}\nPregame Ritual: {player["ritual"]}\nBatting Stars: {player["batting_stars"]}\n'
-
-
-with open("batters.txt", "w") as text_file:
-    idlist = clean_team_list()
-    for team in idlist:
-        roster = get_team_roster(team)
-        for player in roster:
-            summary = summarize_player(player)
-            if summary != None:
-                print(summary)
-                text_file.write(summary)
-"""
 @app.route("/")
 def landing():
-    app.logger.info("On Main Page!")
+    #Home page
     title = 'HCDE 310 Final: Blaseball Vibes & Fate'
     return render_template('origin.html',title=title)
 
 @app.route("/vteam")
 def vleague_list():
+    #Grab and display the teams in the league for user selection.
     title = 'Vibe Analysis Tool'
-    #desc goes here
     data = clean_team_list()
     outdata = []
     for team in data:
         if team.name == "The Hall Stars":
+            #The Hall Stars name has 'The' in it, unlike every other team. This fixes that so it fits into the templates right.
             team.name = "Hall Stars"
             app.logger.info(f"***Editing the Hall Stars!")
         if team.name != "Hall Stars" and team.status != 'active':
+            #Only active teams from the list are displayed.
+            #The Hall Stars are an exception to this, as their roster has seen actual play, unlike other inactive teams.
             app.logger.info(f"***Removing {team} from roster")
         else:
             app.logger.info(f"***{team} remains. They are {team.status}")
             outdata.append(team)
+    #The Vault and the Hall of Flame are not proper teams, but I'd like the option to analyze players from them.
+    #As such, area-type records for both are generated and added.
     outdata.append(area_record("Vault", "0x1F947", '698cfc6d-e95e-4391-b754-b87337e4d2a9'))
-    outdata.append(area_record("Hall of Flame", "0x1f480", id = 'Hell'))
+    outdata.append(area_record("Hall of Flame", "0x1f480", 'Underworld'))
     return render_template('vteam_select.html',title=title,data=outdata)
 
 @app.route("/vroster")
 def vroster_printer():
+    #Gets the roster for the selected team/area and returns it for user selection.
     team = request.args.get("selected_team")
-    print(team)
     app.logger.info(f"Getting roster for the {team}")
-    if team == "Hell":
+    if team == "Underworld":
+        #The Hall of Flame is not and never was a team. It does not have a roster that can be called.
+        #Since it's just where dead players hang out, we instead just get a list of all deceased players without a proper team affiliation.
+        #Yes, that's an issue. There are dead players who are still playing actively. It makes this rather annoying.
         raw_roster = get_pooled_players()
         for player in raw_roster:
             if player['team'] != 'null':
                 raw_roster.remove(player)
     else:
+        #You can get the roster for all the other teams, including the Vault, by directly feeding it to Blaseball Reference. Convenient.
         raw_roster = get_team_roster(team, includeShadows=True)
     clean_roster = [player_record(player) for player in raw_roster]
     return render_template('vroster_return.html',title=f"Roster for the {team}",roster=clean_roster,team=team)
 
 @app.route("/gvibes")
 def vibe_charts():
+    #Generates the chart of the selected player's vibes over the course of a hypothetical season.
     id = request.args.get("selected_player")
     player = player_record(get_player(id))
     #Vibes aren't stored on any accessible APIs, but its formula is visible on the front-end of the Blaseball website.
-    #We can use this to recreate a player's vibes using stats that we do have access to.
+    #We can use this to recreate a player's vibes using stats that actually are stored.
     frequency = 6 + round(10 * player.buoyancy)
     range = 0.5 * (player.pressurization + player.cinnamon)
     x = np.arange(99)
@@ -379,7 +380,7 @@ def vibe_charts():
     plt.xlim(0, 100)
     plt.ylim(-2.0, 2.0)
     #We can't simply save the image to the server then call it by local url, since that'd be a security risk.
-    #This necessitates that I instead convert the image to a base64 string, which can be fed directly to the jinja template and be turned back into an image.
+    #This necessitates that I instead convert the image to a base64 string, which can be fed directly to the jinja template and then turned back into an image there.
     #Utter clownery.
     #Code adapted from https://stackoverflow.com/questions/38061267/matplotlib-graphic-image-to-base64
     #Corresponding HTML adapted from https://stackoverflow.com/questions/31492525/converting-matplotlib-png-to-base64-for-viewing-in-html-template
@@ -393,40 +394,51 @@ def vibe_charts():
 
 @app.route("/fteam")
 def fleague_list():
-    title = 'Fate Summary Tool'
-    #desc goes here
+    #Grab and display the teams in the league for user selection.
+    title = 'Fate History Tool'
     data = clean_team_list()
     outdata = []
     for team in data:
         if team.name == "The Hall Stars":
             team.name = "Hall Stars"
+            #The Hall Stars name has 'The' in it, unlike every other team. This fixes that so it fits into the templates right.
             app.logger.info(f"***Editing the Hall Stars!")
         if team.name != "Hall Stars" and team.status != 'active':
+            #Only active teams from the list are displayed.
+            #The Hall Stars are an exception to this, as their roster has seen actual play, unlike other inactive teams.
             app.logger.info(f"***Removing {team} from roster")
         else:
             app.logger.info(f"***{team} remains. They are {team.status}")
             outdata.append(team)
+    #The Vault and the Hall of Flame are not proper teams, but I'd like the option to analyze players from them.
+    #As such, area-type records for both are generated and added.
     outdata.append(area_record("Vault", "0x1F947", '698cfc6d-e95e-4391-b754-b87337e4d2a9'))
     outdata.append(area_record("Hall of Flame", "0x1f480", id = 'Underworld'))
     return render_template('fteam_select.html',title=title,data=outdata)
 
 @app.route("/froster")
 def froster_printer():
+    #Gets the roster for the selected team/area and returns it for user selection.
     team = request.args.get("selected_team")
     print(team)
     app.logger.info(f"Getting roster for the {team}")
+    #The Hall of Flame is not and never was a team. It does not have a roster that can be called.
+    #Since it's just where dead players hang out, we instead just get a list of all deceased players without a proper team affiliation.
+    #Yes, that's an issue. There are dead players who are still playing actively. It makes this rather annoying.
     if team == "Underworld":
         raw_roster = get_pooled_players()
         for player in raw_roster:
             if player['team'] != 'null':
                 raw_roster.remove(player)
     else:
+        #You can get the roster for all the other teams, including the Vault, by directly feeding it to Blaseball Reference. Convenient.
         raw_roster = get_team_roster(team, includeShadows=True)
     clean_roster = [player_record(player) for player in raw_roster]
     return render_template('froster_return.html',title=f"Roster for the {team}",roster=clean_roster,team=team)
 
 @app.route("/fhist")
 def fate_summary():
+    #Get the selected player's history of Fate changes, and display the summary.
     player_id = request.args.get("selected_player")
     hist = get_full_player_history(player_id)
     fate_hist = fate_filtered_history(hist)
@@ -434,6 +446,7 @@ def fate_summary():
 
 @app.route("/fseason")
 def scatter_definer():
+    #Prompt the user to select a performance stat to analyze against and a season to draw data from.
     batter_stats = ['doubles','triples','home_runs','runs_batted_in','walks', 'strikeouts', 'batting_average', 'on_base_percentage', 'batting_average_risp', 'slugging', 'on_base_slugging']
     pitcher_stats = ["win_pct","earned_run_average","walks_per_9","hits_per_9","strikeouts_per_9","home_runs_per_9","whip","strikeouts_per_walk"]
     return render_template('scatter_definer.html',title=f"Fate Comparison Tool",batter_stats=batter_stats,pitcher_stats=pitcher_stats)
@@ -444,8 +457,10 @@ def fate_scatter():
     batter_stats = ['doubles','triples','home_runs','runs_batted_in','walks', 'strikeouts', 'batting_average', 'on_base_percentage', 'batting_average_risp', 'slugging', 'on_base_slugging']
     statistic = request.args.get("selected_stat")
     season = int(request.args.get("season"))-1
+    #get all players for the chosen season
     league = get_players_seasonal(season)
     playersfate = []
+    #Go over the list of players. Only keep those who are in the correct position on the main roster.
     if statistic in batter_stats:
         category = 'batting'
         for player in league:
@@ -456,20 +471,25 @@ def fate_scatter():
         for player in league:
             if player['position_type'] == 'PITCHER' and player["current_location"] == "main_roster":
                 playersfate.append(player)
+    #Get the stats for all remaining players.
     playerstats = get_player_stats(category, season, playersfate)
-    playersfate = sorted(playersfate, key = lambda i: i['player_id'])
-    playerstats = sorted(playerstats, key = lambda i: (i['player_id'], float(i[statistic]or 0.0)))
+    #Sort both lists by player id to ensure that the right values are paired together.
+    playersfate = sorted(playersfate, key = lambda i: i['player_id'], reverse=True)
+    playerstats = sorted(playerstats, key = lambda i: (i['player_id'], float(i[statistic]or 0.0)), reverse=True )
+    #matplotlib can't handle lists of dictionaries, so convert both of them into a dictionary of lists.
     graph_inputs = {'fate':[], 'stat':[]}
     for player in playersfate:
         graph_inputs['fate'].append(player['fate'])
     last_player = None
     for player in playerstats:
         app.logger.info(player['player_name'])
+        #the stat list includes records for all the teams a player played for separate from each other. Only the highest stat is kept.
         if last_player == player['player_name']:
-            graph_inputs['stat'][-1]+=(float(player[statistic] or 0.0))
+            graph_inputs['stat'][-1]=(float(player[statistic] or 0.0))
         else:
             graph_inputs['stat'].append(float(player[statistic] or 0.0))
         last_player = player['player_name']
+    #Finally graph the thing and feed it to the template.
     plt.scatter(x=graph_inputs['fate'], y=graph_inputs['stat'])
     plt.xlabel('Fate')
     plt.ylabel(statistic)
@@ -481,32 +501,5 @@ def fate_scatter():
     chart_bytes.close()
     return render_template('fate_scatter.html',title=f"{statistic} compared to Fate in season {season+1}", graph=chart_base64.decode('utf8'))
 
-#@app.route("/review")
-
-#MalikID = '1301ee81-406e-43d9-b2bb-55ca6e0f7765'
-#hist = get_full_player_history(MalikID)
-#fate_hist = fate_filtered_history(hist)
-#for entry in fate_hist:
-#    print(entry)
-
-
-#league_fate = []
-#idlist = get_player()
-#for player in idlist:
-#    print(player["player_name"])
-#    hist = get_full_player_history(player["player_id"])
-#    fate_hist = fate_filtered_history(hist)
-#    if len(fate_hist) > 1:
-#        for entry in fate_hist:
-#            league_fate.append(entry)
-
-#with open("fate.txt", "w") as text_file:
-#    for entry in league_fate:
-#        text_file.write(str(entry))
-
-
 if __name__ == "__main__":
-    # Used when running locally only.
-    # When deploying to Google AppEngine, a webserver process will
-    # serve your app.
     app.run(host="localhost", port=8080, debug=True)
